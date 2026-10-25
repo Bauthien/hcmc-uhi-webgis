@@ -1,0 +1,53 @@
+{
+  "units": {
+    "LST": "°C",
+    "NDVI": "không có đơn vị",
+    "TVDI": "0-1",
+    "UTFVI": "không có đơn vị",
+    "NO2": "µmol/m² (cột tầng đối lưu, Sentinel-5P)",
+    "CO": "mmol/m² (Sentinel-5P)",
+    "AOD": "không có đơn vị (MODIS MAIAC, 0.55 µm)"
+  },
+  "utfvi_thresholds": [
+    0,
+    0.005,
+    0.01,
+    0.015,
+    0.02
+  ],
+  "utfvi_class_names": [
+    "Không",
+    "Yếu",
+    "Trung bình",
+    "Mạnh",
+    "Rất mạnh",
+    "Cực mạnh"
+  ],
+  "history_range": [
+    "2020-01",
+    "2026-08"
+  ],
+  "forecast_months": [
+    "2026-09",
+    "2026-10",
+    "2026-11",
+    "2026-12"
+  ],
+  "months_without_landsat": [
+    "2020-05",
+    "2020-07",
+    "2020-08",
+    "2022-09",
+    "2025-01",
+    "2025-06",
+    "2025-07",
+    "2025-10"
+  ],
+  "notes": [
+    "Ranh giới quận/huyện theo GAUL 2015, cố định cho cả giai đoạn; Quận 2, Quận 9 và Thủ Đức cũ gộp thành TP Thủ Đức.",
+    "Lưới 1 km; giá trị NO2, CO có độ phân giải gốc thô hơn (khoảng 1-5 km), AOD từ MODIS.",
+    "Cột observed=False nghĩa là giá trị Landsat đã được nội suy (không phải quan sát thật).",
+    "Dự báo 9-12/2026 gần với khí hậu theo tháng ở hầu hết chỉ số; xem bảng reliability.",
+    "Khoảng dự báo (lower, upper) lấy từ phân vị 10% và 90% của sai số ở kiểm thử 2026 (chỉ 8 tháng), chỉ mang tính xấp xỉ."
+  ]
+}
