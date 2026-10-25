@@ -10,8 +10,23 @@ ap.add_argument('--host', default='localhost'); ap.add_argument('--port', defaul
 ap.add_argument('--db', default='env_hcm'); ap.add_argument('--user', default='postgres')
 ap.add_argument('--password', default=os.environ.get('PGPASSWORD', ''))
 ap.add_argument('--data', default='dashboard_data')
+ap.add_argument('--weather', default=None, help='thư mục kết quả Cell 22b (mặc định: <data>/weather nếu có)')
 ap.add_argument('--sql-dir', default=os.path.dirname(os.path.abspath(__file__)))
 a = ap.parse_args()
+WD = a.weather or os.path.join(a.data, 'weather')
+HAS_WEATHER = os.path.exists(os.path.join(WD, 'weather_history.csv.gz'))
+
+
+def reliability_label(ind, pct):
+    """Quy tắc nhãn như Cell 24: chỉ NDVI, UTFVI, AOD được coi là cải thiện; chỉ số khác tối đa 'Tương đương'."""
+    can = ind in ('NDVI', 'UTFVI', 'AOD')
+    if can and pct <= -5:
+        return 'Cải thiện so với khí hậu'
+    if can and pct <= -2:
+        return 'Cải thiện nhẹ'
+    if pct > 3:
+        return 'Kém hơn khí hậu'
+    return 'Tương đương khí hậu'
 
 DX, DY = 0.00457, 0.00452          # nửa cạnh ô 1 km tính theo độ kinh và vĩ (vĩ độ khoảng 10,8 độ)
 
@@ -60,12 +75,23 @@ h = h.rename(columns={'date': 'obs_month', 'LST': 'lst', 'NDVI': 'ndvi', 'TVDI':
                       'UTFVI_class': 'utfvi_class', 'NO2': 'no2', 'CO': 'co', 'AOD': 'aod'})
 h['obs_month'] = h.obs_month.dt.date
 h['utfvi_class'] = h.utfvi_class.astype('Int64')
-copy_df(cur, h, 'observation', ['cell_id', 'obs_month', 'lst', 'ndvi', 'tvdi', 'utfvi', 'utfvi_class', 'no2', 'co', 'aod', 'observed'])
-print('  observation:', len(h))
+if HAS_WEATHER:   # nhiệt độ không khí và lượng mưa ERA5-Land (Cell 22b)
+    w = pd.read_csv(f'{WD}/weather_history.csv.gz', parse_dates=['date'], encoding='utf-8-sig')
+    w = w.rename(columns={'date': 'obs_month', 'T2M': 't2m', 'PRECIP': 'precip'})
+    w['obs_month'] = w.obs_month.dt.date
+    h = h.merge(w, on=['cell_id', 'obs_month'], how='left')
+else:
+    h['t2m'] = h['precip'] = None
+copy_df(cur, h, 'observation', ['cell_id', 'obs_month', 'lst', 'ndvi', 'tvdi', 'utfvi', 'utfvi_class', 'no2', 'co', 'aod',
+                                't2m', 'precip', 'observed'])
+print('  observation:', len(h), '(có T2M, PRECIP)' if HAS_WEATHER else '(chưa có T2M, PRECIP)')
 
 # ---- Dự báo ----
 f = pd.read_csv(f'{a.data}/forecast.csv.gz', parse_dates=['date'], encoding='utf-8-sig')
 f = f.rename(columns={'date': 'target_month', 'UTFVI_class': 'utfvi_class'})
+if HAS_WEATHER:
+    fw = pd.read_csv(f'{WD}/weather_forecast.csv.gz', parse_dates=['date'], encoding='utf-8-sig')
+    f = pd.concat([f, fw.rename(columns={'date': 'target_month'})], ignore_index=True)
 f['target_month'] = f.target_month.dt.date
 f['utfvi_class'] = f.utfvi_class.astype('Int64')
 copy_df(cur, f, 'forecast', ['cell_id', 'indicator', 'target_month', 'horizon', 'forecast', 'lower', 'upper', 'climatology', 'utfvi_class'])
@@ -73,14 +99,27 @@ print('  forecast:', len(f))
 
 # ---- Kiểm thử 2026 ----
 t = pd.read_csv(f'{a.data}/test_2026.csv.gz', parse_dates=['date'], encoding='utf-8-sig').rename(columns={'date': 'obs_month'})
+if HAS_WEATHER:
+    tw = pd.read_csv(f'{WD}/weather_test_2026.csv.gz', parse_dates=['date'], encoding='utf-8-sig')
+    t = pd.concat([t, tw.rename(columns={'date': 'obs_month'})], ignore_index=True)
 t['obs_month'] = t.obs_month.dt.date
 copy_df(cur, t, 'validation_2026', ['cell_id', 'indicator', 'obs_month', 'actual', 'forecast', 'climatology'])
 print('  validation_2026:', len(t))
 
 # ---- Độ tin cậy và mô tả ----
 r = pd.read_csv(f'{a.data}/reliability.csv', encoding='utf-8-sig')
+if HAS_WEATHER:
+    rw = pd.read_csv(f'{WD}/weather_reliability.csv', encoding='utf-8-sig')
+    rw['reliability'] = [reliability_label(i, p) for i, p in zip(rw.indicator, rw.vs_climatology_pct)]
+    r = pd.concat([r, rw], ignore_index=True)
 copy_df(cur, r, 'reliability', ['indicator', 'horizon', 'rmse_model', 'rmse_climatology', 'vs_climatology_pct', 'err_q10', 'err_q90', 'reliability'])
 meta = json.load(open(f'{a.data}/meta.json', encoding='utf-8'))
+if HAS_WEATHER:
+    meta['units'].update(json.load(open(f'{WD}/weather_meta.json', encoding='utf-8'))['units'])
+    fo = pd.read_csv(f'{WD}/weather_backtest_by_fold.csv', encoding='utf-8-sig')
+    meta['weather_backtest'] = [{'indicator': x['chỉ số'], 'fold': x['giai đoạn'], 'vs_climatology_pct': round(x['so khí hậu (%)'], 2),
+                                 'wins': int(x['số tháng thắng khí hậu']), 'months': int(x['số tháng']), 'trees': int(x['số cây'])}
+                                for _, x in fo.iterrows()]
 cur.execute('INSERT INTO app_meta (key, value) VALUES (%s, %s)', ('meta', json.dumps(meta, ensure_ascii=False)))
 
 cur.execute(open(os.path.join(a.sql_dir, 'views.sql'), encoding='utf-8').read())

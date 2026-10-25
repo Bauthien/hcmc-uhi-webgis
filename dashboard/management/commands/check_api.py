@@ -21,9 +21,10 @@ class Command(BaseCommand):
             return json.loads(r.content) if r['Content-Type'].startswith('application') else None
 
         h = get('/api/health/')
-        expected = {'district': 22, 'grid_cell': 1981, 'observation': 158480, 'forecast': 55468,
-                    'validation_2026': 108984, 'reliability': 28, 'district_month': 1760}
-        self.report(h['rows'] == expected, f'số dòng các bảng khớp file bàn giao: {h["rows"]}')
+        # 7 chỉ số gốc + T2M, PRECIP (Cell 22b): forecast +15.848, validation +31.696, reliability +8
+        expected = {'district': 22, 'grid_cell': 1981, 'observation': 158480, 'forecast': 71316,
+                    'validation_2026': 140680, 'reliability': 36, 'district_month': 1760}
+        self.report(h['rows'] == expected, f'số dòng các bảng: {h["rows"]}')
 
         m = get('/api/meta/')
         self.report(len(m['history_months']) == 80 and m['history_months'][-1] == '2026-08', 'meta: 80 tháng lịch sử')

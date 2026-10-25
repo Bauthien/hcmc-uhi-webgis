@@ -9,13 +9,15 @@
     YlOrBr: ['#ffffe5', '#fff7bc', '#fee391', '#fec44f', '#fe9929', '#ec7014', '#cc4c02', '#993404', '#662506'],
     PuRd: ['#f7f4f9', '#e7e1ef', '#d4b9da', '#c994c7', '#df65b0', '#e7298a', '#ce1256', '#980043', '#67001f'],
     BuPu: ['#f7fcfd', '#e0ecf4', '#bfd3e6', '#9ebcda', '#8c96c6', '#8c6bb1', '#88419d', '#810f7c', '#4d004b'],
+    Blues: ['#f7fbff', '#deebf7', '#c6dbef', '#9ecae1', '#6baed6', '#4292c6', '#2171b5', '#08519c', '#08306b'],
     diff: ['#053061', '#2166ac', '#4393c3', '#92c5de', '#d1e5f0', '#f7f7f7', '#fddbc7', '#f4a582', '#d6604d', '#b2182b', '#67001f'],
   };
-  const IND_PALETTE = { UTFVI: 'YlOrRd', LST: 'YlOrRd', NDVI: 'YlGn', TVDI: 'YlOrBr', NO2: 'PuRd', CO: 'PuRd', AOD: 'BuPu' };
+  const IND_PALETTE = { UTFVI: 'YlOrRd', LST: 'YlOrRd', NDVI: 'YlGn', TVDI: 'YlOrBr', NO2: 'PuRd', CO: 'PuRd', AOD: 'BuPu', T2M: 'YlOrRd', PRECIP: 'Blues' };
   const CLASS_COLORS = ['#1a9850', '#a6d96a', '#fee08b', '#fdae61', '#f46d43', '#a50026'];
   const LEVEL_SEMANTICS = {
     LST: ['Mát mẻ', 'Nóng gắt'], NDVI: ['Thảm xanh thưa', 'Xanh tươi dồi dào'], TVDI: ['Ẩm', 'Khô hạn'],
     NO2: ['Thấp', 'Cao'], CO: ['Thấp', 'Cao'], AOD: ['Quang đãng', 'Mù sol khí dày'], UTFVI: ['Sinh thái tốt', 'Đảo nhiệt gay gắt'],
+    T2M: ['Mát', 'Nóng'], PRECIP: ['Ít mưa', 'Mưa nhiều'],
   };
   const C = { cyan: '#16c8f4', hist: '#7c9bb8', clim: '#ffb648', actual: '#ff7393', city: '#7c9bb8', grid: '#1b3047', text: '#91a4ba' };
   const YEAR_COLORS = ['#7c9bb8', '#a78bfa', '#42d9a4', '#ffb648', '#ff7393', '#4dabf7', '#16c8f4'];
@@ -37,12 +39,14 @@
     cache[url] = body;
     return body;
   }
-  const prec = (ind) => ({ LST: 1, NO2: 1, CO: 1, UTFVI: 4 }[ind] ?? 3);
+  const prec = (ind) => ({ LST: 1, NO2: 1, CO: 1, UTFVI: 4, T2M: 1, PRECIP: 0 }[ind] ?? 3);
+  const WEATHER = ['T2M', 'PRECIP'];
   function fmt(v, d) {
     if (v === null || v === undefined || Number.isNaN(v)) return '—';
     return Number(v).toLocaleString('vi-VN', { minimumFractionDigits: d, maximumFractionDigits: d });
   }
-  const sgn = (v, d) => (v > 0 ? '+' : '') + fmt(v, d);
+  const tiny = (v, d) => Math.abs(v) < 0.5 * 10 ** -d;          // làm tròn thành 0 ở d chữ số
+  const sgn = (v, d) => (tiny(v, d) ? fmt(0, d) : (v > 0 ? '+' : '') + fmt(v, d));
   const unitSfx = () => (IND[S.ind].unit ? ' ' + IND[S.ind].unit : '');
   const qs = (p) => Object.entries(p).filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
@@ -106,6 +110,9 @@
       CO: `Cột CO trung bình ${x} mmol/m² (Sentinel-5P), là lượng trong cả cột khí quyển, không phải nồng độ mặt đất.`,
       AOD: `Độ dày quang học sol khí ${x} (MODIS MAIAC), phản ánh lượng hạt lơ lửng trong cột khí quyển.`,
     };
+    // Thời tiết ERA5-Land: không đặt ngưỡng đánh giá, chỉ mô tả
+    if (ind === 'T2M') return ['status-neutral', `Nhiệt độ không khí ${x} °C`, `Nhiệt độ không khí trung bình tháng ở độ cao 2 m đạt ${x} °C (ERA5-Land, ô gốc khoảng 9 km nên ít khác biệt giữa các quận).`];
+    if (ind === 'PRECIP') return ['status-neutral', `Lượng mưa ${x} mm`, `Tổng lượng mưa tháng ${x} mm (ERA5-Land, ô gốc khoảng 9 km).`];
     if (ind === 'UTFVI') {
       const k = classifyUtfvi(v), n = classNames()[k - 1];
       const cls = k <= 2 ? 'status-low' : k === 3 ? 'status-mid' : 'status-high';
@@ -132,8 +139,9 @@
       if (!hist) return ['Landsat 8/9 (TIRS & OLI)', 'Mô hình XGBoost dự báo', 'status-cyan'];
       return bad ? ['Landsat 8/9 (TIRS & OLI)', 'Nội suy (không có ảnh sạch mây)', 'status-mid'] : ['Landsat 8/9 (TIRS & OLI)', 'Ảnh quan sát thật (1 km)', 'status-low'];
     }
-    const sensor = ind === 'AOD' ? 'MODIS (MAIAC 1 km)' : 'Sentinel-5P (TROPOMI)';
-    return hist ? [sensor, 'Trung bình tháng từ vệ tinh', 'status-low'] : [sensor, 'Mô hình XGBoost dự báo', 'status-cyan'];
+    const sensor = ind === 'AOD' ? 'MODIS (MAIAC 1 km)' : WEATHER.includes(ind) ? 'ERA5-Land (tái phân tích, ~9 km)' : 'Sentinel-5P (TROPOMI)';
+    const histText = WEATHER.includes(ind) ? 'Trung bình tháng (tái phân tích)' : 'Trung bình tháng từ vệ tinh';
+    return hist ? [sensor, histText, 'status-low'] : [sensor, 'Mô hình XGBoost dự báo', 'status-cyan'];
   }
 
   // ---------------- khởi tạo ----------------
@@ -145,8 +153,17 @@
     META = await getJSON('/api/meta/');
     META.indicators.forEach((i) => { IND[i.id] = i; });
     META.districts.forEach((d) => { DIST[d.id] = d; });
+    // Mở sẵn theo địa chỉ, ví dụ /?indicator=T2M&mode=forecast&district=4#forecast
+    const qp = new URLSearchParams(location.search);
+    if (IND[qp.get('indicator')]) S.ind = qp.get('indicator');
+    if (qp.get('mode') === 'forecast') {
+      S.mode = 'forecast';
+      document.querySelector('input[name=mode][value=forecast]').checked = true;
+    }
+    if (DIST[qp.get('district')]) S.district = Number(qp.get('district'));
     $('sel-indicator').innerHTML = META.indicators.map((i) => `<option value="${i.id}"${i.id === S.ind ? ' selected' : ''}>${esc(i.name)}</option>`).join('');
     $('sel-district').innerHTML += META.districts.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    if (S.district !== null) $('sel-district').value = String(S.district);
     S.month = META.history_months[META.history_months.length - 1];
     setupMonths();
     bindEvents();
@@ -274,11 +291,11 @@
       const clim = cache[valuesUrl(S.month).replace('view=forecast', 'view=climatology')];
       if (clim) {
         const dc = avg - mean(scoped(clim));
-        delta = `<span class="hero-tag">Chênh lệch khí hậu: <strong>${sgn(dc, d)}${u}</strong> (${dc > 0 ? 'cao hơn' : 'thấp hơn'})</span>`;
+        delta = `<span class="hero-tag">Chênh lệch khí hậu: <strong>${sgn(dc, d)}${u}</strong> (${tiny(dc, d) ? 'xấp xỉ' : dc > 0 ? 'cao hơn' : 'thấp hơn'})</span>`;
       }
     } else if (PREV) {
       const dm = avg - mean(scoped(PREV));
-      if (!Number.isNaN(dm)) delta = `<span class="hero-tag">So tháng trước (${PREV.month}): <strong>${sgn(dm, d)}${u}</strong> (${dm > 0 ? 'tăng' : 'giảm'})</span>`;
+      if (!Number.isNaN(dm)) delta = `<span class="hero-tag">So tháng trước (${PREV.month}): <strong>${sgn(dm, d)}${u}</strong> (${tiny(dm, d) ? 'không đổi' : dm > 0 ? 'tăng' : 'giảm'})</span>`;
     }
     $('hero-tags').innerHTML = pill(st[0], st[1]) + `<span class="hero-tag">Trung bình: <strong>${fmt(avg, d)}${u}</strong></span>` + delta;
 
@@ -426,7 +443,10 @@
     const share = (f) => (vals.length ? vals.filter(f).length / vals.length * 100 : 0);
     if (isDiff()) return ['Tỉ lệ ô cao hơn khí hậu', share((v) => v > 0), 'Tỉ lệ ô có chênh lệch dự báo − khí hậu dương.'];
     if (classes) return ['Tỉ lệ ô cảnh báo nhiệt', classes.length ? classes.filter((k) => k >= 4).length / classes.length * 100 : 0, 'Tỉ lệ ô ở mức UTFVI Mạnh, Rất mạnh hoặc Cực mạnh (mức 4–6).'];
+    const cityMean = mean(Object.values(V.values));
     return {
+      T2M: ['Tỉ lệ ô nóng hơn TB thành phố', share((v) => v > cityMean), 'Tỉ lệ ô có nhiệt độ không khí cao hơn trung bình toàn thành phố cùng tháng.'],
+      PRECIP: ['Tỉ lệ ô mưa nhiều hơn TB thành phố', share((v) => v > cityMean), 'Tỉ lệ ô có lượng mưa cao hơn trung bình toàn thành phố cùng tháng.'],
       LST: ['Tỉ lệ ô nhiệt rất cao (>38°C)', share((v) => v > 38), 'Tỉ lệ ô có nhiệt độ bề mặt trên 38 °C.'],
       NDVI: ['Tỉ lệ ô thảm xanh thấp (<0.30)', share((v) => v < 0.3), 'Tỉ lệ ô có NDVI dưới 0,30.'],
       TVDI: ['Tỉ lệ ô hạn vừa – nặng', share((v) => v >= 0.6), 'Tỉ lệ ô có TVDI từ 0,60 trở lên.'],
@@ -513,7 +533,8 @@
       co.innerHTML = `📍 Khu vực đang chọn: <strong>${esc(sel.name)}</strong> đang xếp hạng <strong>#${String(sel.rank).padStart(2, '0')}/${rows.length}</strong> với giá trị trung bình <strong>${isDiff() ? sgn(sel.mean, d) : fmt(sel.mean, d)}${u}</strong> (mức phân vị tương đối: <strong>${sel.level}</strong>).`;
       co.hidden = false;
     } else co.hidden = true;
-    $('rank-caption').textContent = 'Quận có ít ô lưới (dưới 10 ô, đánh dấu *) thì giá trị trung bình dao động mạnh hơn và kém tin cậy.';
+    $('rank-caption').textContent = 'Quận có ít ô lưới (dưới 10 ô, đánh dấu *) thì giá trị trung bình dao động mạnh hơn và kém tin cậy.'
+      + (WEATHER.includes(S.ind) ? ' Với T2M và lượng mưa (ERA5-Land, ô gốc khoảng 9 km), nhiều quận nội thành nằm chung một ô nên có giá trị bằng nhau; thứ hạng giữa các quận này không có ý nghĩa.' : '');
   }
 
   function exportCsv() {
@@ -592,7 +613,9 @@
     lineChart('chart-history', labels, ds, { bad: s.months_without_landsat, selected: S.month });
     $('hist-note').textContent = IND[S.ind].landsat
       ? 'Trung bình chỉ tính trên ô có quan sát Landsat thật (tháng không có ảnh sạch mây để trống). Vạch xám nét đứt: tháng không có ảnh Landsat sạch mây; nét đứt cyan: 4 tháng dự báo cuối 2026; vạch sáng: tháng đang chọn.'
-      : 'Đường nét liền: quan trắc vệ tinh 2020–08/2026; nét đứt cyan: 4 tháng dự báo 09–12/2026; vạch sáng: tháng đang chọn. NO₂, CO, AOD là lượng trong cột khí quyển, nên đọc theo mùa và theo vùng.';
+      : WEATHER.includes(S.ind)
+        ? 'Đường nét liền: ERA5-Land (tái phân tích khí hậu) 2020–08/2026; nét đứt cyan: 4 tháng dự báo 09–12/2026; vạch sáng: tháng đang chọn. ERA5-Land có ô gốc khoảng 9 km nên khác biệt giữa các quận rất nhỏ.'
+        : 'Đường nét liền: quan trắc vệ tinh 2020–08/2026; nét đứt cyan: 4 tháng dự báo 09–12/2026; vạch sáng: tháng đang chọn. NO₂, CO, AOD là lượng trong cột khí quyển, nên đọc theo mùa và theo vùng.';
 
     // So sánh các năm theo tháng
     const byYear = {};
@@ -648,7 +671,8 @@
 
     const cur = f.forecast.find((r) => r.month === S.month) || f.forecast[0];
     const diff = cur.forecast - cur.climatology;
-    const note = Math.abs(diff) < (['UTFVI', 'NDVI', 'TVDI', 'AOD'].includes(S.ind) ? 0.001 : 0.2)
+    const near = { UTFVI: 0.001, NDVI: 0.001, TVDI: 0.001, AOD: 0.001, T2M: 0.1, PRECIP: 2 }[S.ind] ?? 0.2;
+    const note = Math.abs(diff) < near
       ? `Dự báo ${S.ind} tháng ${cur.month} tại ${districtName()} xấp xỉ mức khí hậu (${fmt(cur.forecast, d)}${u} so với ${fmt(cur.climatology, d)}${u}).`
       : `Dự báo ${S.ind} tháng ${cur.month} tại ${districtName()} đạt ${fmt(cur.forecast, d)}${u}, ${diff > 0 ? 'cao hơn' : 'thấp hơn'} mức khí hậu ${fmt(Math.abs(diff), d)}${u}.`;
     const warn = {
@@ -659,9 +683,22 @@
       TVDI: 'TVDI: mô hình chỉ nhỉnh hơn khí hậu ở dự báo 1 tháng.',
       UTFVI: 'UTFVI: cải thiện so với khí hậu chủ yếu ở dự báo 1 tháng và ở khác biệt giữa các ô.',
       NDVI: 'NDVI là chỉ số mô hình tốt hơn khí hậu rõ nhất; R² cao một phần vì khí hậu đã giải thích phần lớn biến động.',
+      T2M: 'T2M: mô hình ngang khí hậu ở dự báo 1 tháng và kém hơn rõ ở 2–4 tháng; dừng sớm thường chỉ giữ 1–3 cây, tức mô hình gần như trở về khí hậu.',
+      PRECIP: 'Lượng mưa: mô hình không tốt hơn khí hậu ở giai đoạn nào (2026 kém hơn 21,8%); lượng mưa tháng gần như không dự báo được từ dữ liệu quá khứ.',
     }[S.ind];
+    let fold = '';
+    const bt = (META.meta.weather_backtest || []).filter((x) => x.indicator === S.ind);
+    if (bt.length) {
+      fold = '<div class="section-title"><div><h2>Đánh giá 4 giai đoạn (dự báo trước 1 tháng)</h2><p>Kiểm thử lần lượt 2023, 2024, 2025 và 1–8/2026, mỗi lần huấn luyện bằng dữ liệu trước đó</p></div></div>'
+        + table([
+          { label: 'Giai đoạn', get: (r) => r.fold },
+          { label: 'So khí hậu (%)', num: true, get: (r) => sgn(r.vs_climatology_pct, 1) },
+          { label: 'Tháng thắng khí hậu', get: (r) => `${r.wins}/${r.months}` },
+          { label: 'Số cây (dừng sớm)', get: (r) => r.trees },
+        ], bt);
+    }
     $('fc-notes').innerHTML = `<div class="callout warning"><strong>Nhận định ${S.ind} (${cur.month}).</strong> ${esc(note)} ${esc(warn)}</div>
-      <div class="callout"><strong>Cách diễn giải.</strong> Với phần lớn chỉ số, dự báo gần với khí hậu theo tháng. Mô hình thể hiện tốt hơn khác biệt không gian giữa các khu vực (NDVI, UTFVI) so với biến động chung của toàn thành phố.</div>`;
+      <div class="callout"><strong>Cách diễn giải.</strong> Với phần lớn chỉ số, dự báo gần với khí hậu theo tháng. Mô hình thể hiện tốt hơn khác biệt không gian giữa các khu vực (NDVI, UTFVI) so với biến động chung của toàn thành phố.</div>` + fold;
   }
 
   async function refreshValidation() {
@@ -714,6 +751,7 @@
       'Mô hình chỉ tốt hơn rõ so với khí hậu ở NDVI và UTFVI (dự báo 1 tháng). LST và NO₂ ngang hoặc kém khí hậu; CO không ổn định.',
       'Các nhãn trạng thái (ví dụ "Nhiệt độ khá cao", "NO₂ cao") dùng ngưỡng tự đặt để đọc nhanh, không phải tiêu chuẩn môi trường chính thức.',
       'NO₂, CO là lượng trong cột khí quyển đo từ vệ tinh, không phải nồng độ không khí mặt đất. Tương quan giữa các chỉ số không phải quan hệ nhân quả.',
+      'Nhiệt độ không khí (T2M) và lượng mưa lấy từ ERA5-Land (tái phân tích, ô gốc khoảng 9 km): mỗi tháng chỉ khoảng 140–165 giá trị khác nhau trên 1.981 ô, nên không thể hiện được khác biệt giữa các quận. Mô hình không dự báo hai biến này tốt hơn khí hậu.',
     ]);
     $('about-notes').innerHTML = notes.map((x) => `<div class="note-item">${esc(x)}</div>`).join('');
     try {

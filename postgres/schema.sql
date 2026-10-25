@@ -35,6 +35,8 @@ CREATE TABLE observation (
     no2          real,
     co           real,
     aod          real,
+    t2m          real,          -- nhiệt độ không khí 2 m (ERA5-Land, °C)
+    precip       real,          -- lượng mưa tháng (ERA5-Land, mm)
     observed     boolean,
     PRIMARY KEY (cell_id, obs_month)
 );

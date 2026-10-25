@@ -1,5 +1,5 @@
 -- views.sql : bảng tổng hợp theo quận/huyện và tháng (chạy sau khi nạp dữ liệu)
--- Chỉ số Landsat chỉ tính trên ô có quan sát thật; NO2, CO, AOD tính trên mọi ô.
+-- Chỉ số Landsat chỉ tính trên ô có quan sát thật; NO2, CO, AOD, T2M, PRECIP tính trên mọi ô.
 CREATE MATERIALIZED VIEW district_month AS
 SELECT d.district_id,
        d.name_vi,
@@ -11,6 +11,8 @@ SELECT d.district_id,
        avg(o.no2) AS no2,
        avg(o.co)  AS co,
        avg(o.aod) AS aod,
+       avg(o.t2m) AS t2m,
+       avg(o.precip) AS precip,
        count(*) FILTER (WHERE o.observed) AS n_observed,
        count(*) AS n_cells
 FROM observation o

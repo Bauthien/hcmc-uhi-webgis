@@ -48,6 +48,8 @@ class Observation(models.Model):
     no2 = models.FloatField(null=True)
     co = models.FloatField(null=True)
     aod = models.FloatField(null=True)
+    t2m = models.FloatField(null=True)
+    precip = models.FloatField(null=True)
     observed = models.BooleanField(null=True)
 
     class Meta:

@@ -21,6 +21,8 @@ INDICATORS = {
     'NO2': {'col': 'no2', 'name': 'NO₂ tầng đối lưu', 'unit': 'µmol/m²', 'landsat': False, 'decimals': 1},
     'CO': {'col': 'co', 'name': 'CO', 'unit': 'mmol/m²', 'landsat': False, 'decimals': 1},
     'AOD': {'col': 'aod', 'name': 'Độ dày quang học sol khí (AOD)', 'unit': '', 'landsat': False, 'decimals': 3},
+    'T2M': {'col': 't2m', 'name': 'Nhiệt độ không khí (T2M)', 'unit': '°C', 'landsat': False, 'decimals': 1},
+    'PRECIP': {'col': 'precip', 'name': 'Lượng mưa (PRECIP)', 'unit': 'mm/tháng', 'landsat': False, 'decimals': 0},
 }
 FORECAST_VIEWS = ('forecast', 'climatology', 'diff')
 STRONG_UTFVI_CLASS = 4          # từ mức "Mạnh" trở lên
