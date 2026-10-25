@@ -1,5 +1,9 @@
+# WebGIS Django (sản phẩm chính)
+Django>=5.2.8,<5.3
+psycopg2-binary>=2.9.9
+pandas
+# Bản mẫu Streamlit (app.py, phương án dự phòng khi demo)
 streamlit
 folium
 streamlit-folium
-pandas
 numpy

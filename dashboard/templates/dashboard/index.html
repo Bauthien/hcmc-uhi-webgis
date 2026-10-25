@@ -1,0 +1,155 @@
+{% load static %}<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Môi trường TP.HCM 2020-2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="{% static 'dashboard/vendor/leaflet.css' %}">
+  <link rel="stylesheet" href="{% static 'dashboard/app.css' %}">
+</head>
+<body>
+<div class="app">
+  <!-- ===== Thanh bên: bộ lọc ===== -->
+  <aside class="sidebar" id="sidebar">
+    <h1>Bộ lọc</h1>
+    <div class="field">
+      <span class="field-label">Chế độ xem</span>
+      <label class="radio"><input type="radio" name="mode" value="history" checked><span>Lịch sử 2020-2026</span></label>
+      <label class="radio"><input type="radio" name="mode" value="forecast"><span>Dự báo 9-12/2026</span></label>
+    </div>
+    <div class="field">
+      <label class="field-label" for="sel-indicator">Lớp dữ liệu</label>
+      <select id="sel-indicator"></select>
+    </div>
+    <div class="field">
+      <label class="field-label" for="sel-district">Khu vực</label>
+      <select id="sel-district"><option value="all">Toàn thành phố</option></select>
+    </div>
+    <div class="field">
+      <div class="slider-head"><label class="field-label" for="rng-month" id="lbl-month">Tháng</label><span id="month-value"></span></div>
+      <input type="range" id="rng-month" min="0" max="0" value="0">
+    </div>
+    <div class="field" id="wrap-observed">
+      <label class="check"><input type="checkbox" id="chk-observed"><span>Chỉ hiển thị ô có ảnh Landsat quan sát thật</span></label>
+    </div>
+    <div class="side-warning" id="side-warning" hidden>Tháng này không có ảnh Landsat đáng tin cậy: giá trị là nội suy.</div>
+    <div class="field" id="wrap-view" hidden>
+      <span class="field-label">Hiển thị</span>
+      <label class="radio"><input type="radio" name="view" value="forecast" checked><span>Dự báo</span></label>
+      <label class="radio"><input type="radio" name="view" value="climatology"><span>Khí hậu theo tháng</span></label>
+      <label class="radio"><input type="radio" name="view" value="diff"><span>Chênh (dự báo - khí hậu)</span></label>
+    </div>
+    <div class="field" id="wrap-scale">
+      <span class="field-label" title="Tự động: min–max theo dữ liệu tháng và khu vực đang chọn. Cố định: dải phân vị 2–98% toàn kỳ 2020–2026. Chế độ chênh lệch luôn dùng thang đối xứng quanh 0.">Thang màu bản đồ ⓘ</span>
+      <label class="radio"><input type="radio" name="scale" value="auto" checked><span>Tự động theo tháng hiện tại</span></label>
+      <label class="radio"><input type="radio" name="scale" value="fixed"><span>Cố định toàn kỳ 2020–2026</span></label>
+    </div>
+  </aside>
+
+  <main class="content">
+    <button class="menu-btn" id="menu-btn" aria-label="Mở bộ lọc">☰ Bộ lọc</button>
+    <!-- ===== Tiêu đề ===== -->
+    <div class="page-hero">
+      <div>
+        <div class="hero-kicker">Environment intelligence · TP. Hồ Chí Minh</div>
+        <div class="hero-title" id="hero-title"></div>
+        <div class="hero-subtitle" id="hero-subtitle"></div>
+        <div class="hero-tag-list" id="hero-tags"></div>
+      </div>
+      <button class="btn" id="btn-csv">↓&nbsp; Xuất báo cáo CSV</button>
+    </div>
+
+    <div class="insight-banner">
+      <div class="insight-icon">i</div>
+      <div class="insight-copy" id="insight"></div>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="map" role="tab">Bản đồ</button>
+      <button class="tab" data-tab="history" role="tab">Biểu đồ lịch sử</button>
+      <button class="tab" data-tab="forecast" role="tab">Dự báo</button>
+      <button class="tab" data-tab="validation" role="tab">Kiểm định 2026</button>
+      <button class="tab" data-tab="about" role="tab">Giới thiệu và hạn chế</button>
+    </nav>
+
+    <!-- ===== Bản đồ ===== -->
+    <section class="panel active" id="tab-map">
+      <div class="panel-heading"><h2>Phân bố không gian</h2><span>Nhấp vào một ô để chọn quận/huyện</span></div>
+      <div class="callout" id="map-info" hidden></div>
+      <div class="map-wrap">
+        <div id="map"></div>
+        <div class="map-msg" id="map-msg" hidden></div>
+      </div>
+      <div class="metric-grid" id="metrics"></div>
+      <div class="panel-heading"><h2>Xếp hạng quận / huyện</h2><span>So sánh các khu vực nổi bật</span></div>
+      <div class="callout" id="rank-callout" hidden></div>
+      <div id="rank-top"></div>
+      <details class="expander" id="rank-all-wrap">
+        <summary id="rank-all-summary"></summary>
+        <div id="rank-all"></div>
+      </details>
+      <p class="caption" id="rank-caption"></p>
+    </section>
+
+    <!-- ===== Lịch sử ===== -->
+    <section class="panel" id="tab-history">
+      <h3 class="sub" id="hist-title"></h3>
+      <div class="chart-box"><canvas id="chart-history"></canvas></div>
+      <p class="caption" id="hist-note"></p>
+      <h3 class="sub">So sánh các năm theo tháng</h3>
+      <div class="chart-box"><canvas id="chart-years"></canvas></div>
+      <p class="caption" id="years-note"></p>
+    </section>
+
+    <!-- ===== Dự báo ===== -->
+    <section class="panel" id="tab-forecast">
+      <div class="section-title"><div><h2 id="fc-title"></h2><p id="fc-sub"></p></div></div>
+      <div class="chart-box"><canvas id="chart-forecast"></canvas></div>
+      <p class="caption" id="fc-note"></p>
+      <div class="section-title"><div><h2>Bảng tổng hợp 4 tháng dự báo (09–12/2026)</h2><p id="fc-table-sub"></p></div></div>
+      <div id="fc-table"></div>
+      <div class="section-title"><div><h2>Độ tin cậy dự báo</h2><p id="rel-sub"></p></div></div>
+      <div id="rel-table"></div>
+      <p class="caption">Bảng RMSE là kết quả đánh giá gộp toàn thành phố trên tập kiểm thử 2026. Số âm ở cột "So khí hậu (%)" nghĩa là mô hình có sai số thấp hơn đường cơ sở khí hậu.</p>
+      <div id="fc-notes"></div>
+    </section>
+
+    <!-- ===== Kiểm định 2026 ===== -->
+    <section class="panel" id="tab-validation">
+      <div class="section-title"><div><h2 id="val-title"></h2><p id="val-sub"></p></div></div>
+      <div class="chart-box"><canvas id="chart-validation"></canvas></div>
+      <p class="caption" id="val-note"></p>
+      <div class="metric-grid three" id="val-metrics"></div>
+      <div class="section-title"><div><h2>Chi tiết kiểm định từng tháng (1–8/2026)</h2><p id="val-table-sub"></p></div></div>
+      <div id="val-table"></div>
+      <p class="caption" id="val-table-note"></p>
+    </section>
+
+    <!-- ===== Giới thiệu ===== -->
+    <section class="panel" id="tab-about">
+      <div class="section-title"><div><h2>Dữ liệu &amp; phương pháp</h2><p>Nguồn dữ liệu, quy trình dự báo và cách đánh giá</p></div></div>
+      <div class="info-grid">
+        <div class="info-card"><div class="eyebrow">01 · Nguồn dữ liệu</div><strong>Quan trắc vệ tinh &amp; khí hậu</strong>
+          <p>Landsat 8/9, Sentinel-5P, MODIS MAIAC và ERA5-Land; xử lý trên Google Earth Engine, tổng hợp theo tháng trên lưới 1 km.</p></div>
+        <div class="info-card"><div class="eyebrow">02 · Mô hình</div><strong>Dự báo theo khu vực</strong>
+          <p>XGBoost ước lượng phần sai lệch so với khí hậu theo tháng cho từng ô lưới, với tầm dự báo từ 1 đến 4 tháng.</p></div>
+        <div class="info-card"><div class="eyebrow">03 · Đánh giá</div><strong>Kiểm thử nhiều giai đoạn</strong>
+          <p>Đối chiếu trên các giai đoạn 2023, 2024, 2025 và tháng 1–8/2026 với đường cơ sở khí hậu theo tháng.</p></div>
+        <div class="info-card"><div class="eyebrow">04 · Hệ thống</div><strong>Django + PostgreSQL/PostGIS</strong>
+          <p id="about-health">Dữ liệu lưu trong PostGIS; Django cung cấp API, trình duyệt hiển thị bằng Leaflet và Chart.js.</p></div>
+      </div>
+      <div class="section-title"><div><h2>Phân cấp UTFVI</h2><p>Các ngưỡng diễn giải chỉ số sinh thái nhiệt</p></div></div>
+      <div id="utfvi-table"></div>
+      <div class="section-title"><div><h2>Hạn chế &amp; lưu ý</h2><p>Đọc kỹ trước khi so sánh hoặc diễn giải kết quả</p></div></div>
+      <div class="note-list" id="about-notes"></div>
+    </section>
+  </main>
+</div>
+
+<script src="{% static 'dashboard/vendor/leaflet.js' %}"></script>
+<script src="{% static 'dashboard/vendor/chart.umd.min.js' %}"></script>
+<script src="{% static 'dashboard/app.js' %}"></script>
+</body>
+</html>
